@@ -1,0 +1,39 @@
+# Convenios de libranza / préstamo y sus condiciones.
+# Reemplace estos EJEMPLOS por los convenios reales de la entidad.
+#
+# tasa_max:      tasa máxima pactada en el convenio (en %).
+# tipo_tasa:     MV (mes vencido) o EA (efectiva anual) — en qué está expresada tasa_max.
+# monto_min/max: en pesos.
+# plazo_max_meses
+# alias:         otros nombres con los que puede aparecer el convenio en Bizagi o en los documentos.
+
+convenios:
+  - codigo: "CONV-001"
+    nombre: "Pagaduría Ejemplo Uno"
+    alias: ["EJEMPLO UNO S.A.S."]
+    productos: [libranza]
+    tasa_max: 1.60
+    tipo_tasa: MV
+    monto_min: 1000000
+    monto_max: 80000000
+    plazo_max_meses: 120
+
+  - codigo: "CONV-002"
+    nombre: "Empresa Ejemplo Dos"
+    alias: []
+    productos: [libranza, prestamo_personal]
+    tasa_max: 22.0
+    tipo_tasa: EA
+    monto_min: 500000
+    monto_max: 40000000
+    plazo_max_meses: 72
+
+  - codigo: "PERSONAL"
+    nombre: "Préstamo personal (sin convenio)"
+    alias: ["LIBRE INVERSION"]
+    productos: [prestamo_personal]
+    tasa_max: 1.85
+    tipo_tasa: MV
+    monto_min: 500000
+    monto_max: 30000000
+    plazo_max_meses: 60

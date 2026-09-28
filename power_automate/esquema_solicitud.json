@@ -1,0 +1,103 @@
+{
+  "type": "object",
+  "properties": {
+    "caso": {
+      "type": "string"
+    },
+    "producto": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "convenio": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "cliente": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "cedula_enmascarada": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "monto": {
+      "type": [
+        "number",
+        "null"
+      ]
+    },
+    "tasa": {
+      "type": [
+        "number",
+        "null"
+      ]
+    },
+    "tipo_tasa": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "plazo_meses": {
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "estado_validacion": {
+      "type": "string"
+    },
+    "errores": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "alertas": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "resumen_markdown": {
+      "type": "string"
+    },
+    "observaciones_auxiliar": {
+      "type": "string"
+    },
+    "enviado_por": {
+      "type": "string"
+    },
+    "correo_gestor": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "correo_auxiliar": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "ruta_expediente": {
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  },
+  "required": [
+    "caso",
+    "estado_validacion",
+    "resumen_markdown"
+  ]
+}

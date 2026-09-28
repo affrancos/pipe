@@ -1,0 +1,9 @@
+[project]
+name = "desembolsos"
+version = "0.1.0"
+description = "Validación automática de documentos para desembolsos de préstamo personal y libranza"
+requires-python = ">=3.10"
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]

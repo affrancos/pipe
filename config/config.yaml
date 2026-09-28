@@ -1,0 +1,71 @@
+# Configuración general de la automatización de desembolsos.
+# Las rutas pueden usar ~ (carpeta del usuario). En Windows se aceptan "/" o "\\".
+
+rutas:
+  # Carpeta donde Bizagi deja los documentos descargados.
+  descargas: "~/Downloads"
+  # Un subdirectorio por caso: casos/<numero_caso>/documentos, textos, resultado.json...
+  # Recomendado: ubicarla dentro de una carpeta de OneDrive/SharePoint sincronizada
+  # para que el gestor pueda abrir el expediente desde la aprobación de Teams.
+  casos: "./casos"
+  # Libro de control con una fila por caso procesado.
+  control_excel: "./casos/control_desembolsos.xlsx"
+
+descargas:
+  extensiones: [".pdf", ".jpg", ".jpeg", ".png", ".tif", ".tiff", ".bmp"]
+  # Solo se recogen archivos descargados en los últimos N minutos.
+  ventana_minutos: 60
+
+ocr:
+  # Ruta a tesseract.exe en Windows. Déjelo en null si tesseract está en el PATH.
+  tesseract_cmd: "C:/Program Files/Tesseract-OCR/tesseract.exe"
+  idioma: "spa"
+  dpi: 300
+  # Si una página PDF tiene menos caracteres que esto, se considera escaneada y se le hace OCR.
+  min_caracteres_pagina: 40
+
+power_automate:
+  # Nombre de la variable de entorno que contiene la URL del disparador HTTP del flujo
+  # ("Cuando se recibe una solicitud HTTP"). La URL no se guarda en el repositorio.
+  variable_url: "PA_URL_APROBACION_DESEMBOLSO"
+  # Alternativa sin HTTP: carpeta de OneDrive/SharePoint sincronizada que el flujo vigila
+  # con "Cuando se crea un archivo". Déjelo en null si usa HTTP.
+  carpeta_solicitudes: null
+  timeout_segundos: 30
+  # Correo del gestor que aprueba y del auxiliar que recibe la respuesta (Outlook/Teams).
+  correo_gestor: "gestor@entidad.com.co"
+  correo_auxiliar: "auxiliar@entidad.com.co"
+
+reglas:
+  # Tasa de usura vigente (E.A.) certificada por la Superintendencia Financiera.
+  # ¡ACTUALIZAR CADA MES! El valor de abajo es solo un ejemplo.
+  tasa_usura_ea: 25.0
+  # Tolerancia para comparar montos entre Bizagi, solicitud y pagaré (en pesos).
+  tolerancia_monto: 1000
+  # Tolerancia para comparar tasas (puntos porcentuales).
+  tolerancia_tasa: 0.01
+  # Antigüedad máxima (en días) de cada documento, contada desde su fecha de expedición.
+  vigencia_dias:
+    certificado_laboral: 30
+    desprendible_nomina: 60
+
+productos:
+  libranza:
+    documentos_requeridos:
+      - solicitud
+      - cedula
+      - desprendible_nomina
+      - certificado_laboral
+      - autorizacion_libranza
+      - pagare
+    # Ley 1527 de 2012: el trabajador debe recibir al menos el 50% de su salario
+    # después de descuentos. Se valida (deducciones actuales + cuota) <= 50% del devengado.
+    capacidad_max_pct: 50
+  prestamo_personal:
+    documentos_requeridos:
+      - solicitud
+      - cedula
+      - desprendible_nomina
+      - pagare
+    # Política interna de endeudamiento (ajustar a la política de la entidad).
+    capacidad_max_pct: 40

@@ -1,0 +1,17 @@
+# Datos de clientes: nunca se suben al repositorio.
+casos/
+*.pdf
+*.jpg
+*.jpeg
+*.png
+*.tif
+*.tiff
+*.xlsx
+solicitud_desembolso_*.json
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+.pytest_cache/
