@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from dataclasses import asdict
 from datetime import date, datetime
 from pathlib import Path
@@ -11,13 +12,72 @@ from pathlib import Path
 from . import ocr
 from .clasificador import clasificar
 from .extractores import extraer_campos
+from .texto import parse_monto, parse_numero, solo_digitos
 from .validador import DatosCaso, Documento, completar_datos_caso, estado_resultado, validar
 
 log = logging.getLogger(__name__)
 
 
+# Archivos que deja Power Automate Desktop en la carpeta del caso.
+ARCHIVO_DATOS = "caso.json"  # datos del caso leídos del portal de Bizagi
+MARCA_LISTO = "LISTO.txt"  # se crea al terminar la descarga: indica que el caso se puede procesar
+MARCA_ERROR = "ERROR_PROCESO.txt"
+
+
+def nombre_carpeta(caso: str) -> str:
+    """Nombre de carpeta válido en Windows para el número o nombre del caso."""
+    return re.sub(r'[<>:"/\\|?*]', "_", str(caso)).strip(" .")
+
+
 def carpeta_caso(config: dict, caso: str) -> Path:
-    return Path(config["rutas"]["casos"]) / str(caso)
+    return Path(config["rutas"]["casos"]) / nombre_carpeta(caso)
+
+
+def datos_desde_dict(caso: str, valores: dict) -> DatosCaso:
+    """Crea DatosCaso a partir de textos tal como vienen de Bizagi ('$ 15.000.000', '1,45 %')."""
+    def texto(clave):
+        valor = valores.get(clave)
+        return str(valor).strip() if valor not in (None, "") else None
+
+    monto, tasa, plazo, cedula = texto("monto"), texto("tasa"), texto("plazo_meses"), texto("cedula")
+    tipo_tasa = texto("tipo_tasa")
+    producto = texto("producto")
+    return DatosCaso(
+        caso=str(caso),
+        producto=producto.lower().replace(" ", "_") if producto else None,
+        convenio=texto("convenio"),
+        cedula=solo_digitos(cedula) if cedula else None,
+        nombre=texto("nombre"),
+        monto=parse_monto(monto) if monto else None,
+        tasa=parse_numero(tasa.replace("%", "")) if tasa else None,
+        tipo_tasa=("EA" if tipo_tasa.upper().lstrip().startswith("E") else "MV") if tipo_tasa else None,
+        plazo_meses=int(solo_digitos(plazo)) if plazo and solo_digitos(plazo) else None,
+    )
+
+
+def leer_datos_caso(config: dict, caso: str) -> dict:
+    """Contenido de caso.json si Power Automate Desktop lo dejó; si no, un diccionario vacío."""
+    ruta = carpeta_caso(config, caso) / ARCHIVO_DATOS
+    if not ruta.exists():
+        return {}
+    # utf-8-sig: PAD puede escribir el archivo con BOM.
+    return json.loads(ruta.read_text(encoding="utf-8-sig"))
+
+
+def casos_pendientes(config: dict) -> list[str]:
+    """Carpetas con LISTO.txt que no se han procesado desde que se marcaron como listas."""
+    raiz = Path(config["rutas"]["casos"])
+    if not raiz.exists():
+        return []
+    pendientes = []
+    for carpeta in sorted(p for p in raiz.iterdir() if p.is_dir()):
+        marca = carpeta / MARCA_LISTO
+        if not marca.exists():
+            continue
+        salidas = [carpeta / "resultado.json", carpeta / MARCA_ERROR]
+        if not any(s.exists() and s.stat().st_mtime >= marca.stat().st_mtime for s in salidas):
+            pendientes.append(carpeta.name)
+    return pendientes
 
 
 def leer_documento(ruta: Path, config: dict, dir_textos: Path, hoy: date | None = None) -> Documento:

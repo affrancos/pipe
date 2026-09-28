@@ -137,3 +137,53 @@ def test_flujo_completo_con_pdf_e_imagen(config, tmp_path):
     assert solicitud["correo_gestor"]
     assert solicitud["cedula_enmascarada"] == "******4050"
     assert "salida_pa" in notificador.enviar(solicitud, config)
+
+
+def test_datos_desde_dict_acepta_textos_de_bizagi():
+    d = expediente.datos_desde_dict("LIB-1", {
+        "producto": "Libranza", "cedula": "1.020.304.050", "monto": "$ 15.000.000",
+        "tasa": "1,45 %", "tipo_tasa": "M.V.", "plazo_meses": "60 meses", "convenio": "",
+    })
+    assert (d.producto, d.cedula, d.monto, d.tasa, d.tipo_tasa, d.plazo_meses, d.convenio) == (
+        "libranza", "1020304050", 15_000_000, 1.45, "MV", 60, None)
+    assert expediente.datos_desde_dict("x", {"tipo_tasa": "E.A."}).tipo_tasa == "EA"
+
+
+def test_nombre_de_carpeta_valido_en_windows():
+    assert expediente.nombre_carpeta("LIB/2026:0001 ") == "LIB_2026_0001"
+
+
+@pytest.mark.skipif(shutil.which("tesseract") is None, reason="Tesseract no instalado")
+def test_pendientes_procesa_carpetas_de_power_automate_desktop(config):
+    import json
+
+    from desembolsos.cli import procesar_pendientes
+
+    raiz = config["rutas"]["casos"]
+    # Caso completo, como lo deja PAD: documentos + caso.json + LISTO.txt
+    base = raiz / "LIB-0001"
+    (base / "documentos").mkdir(parents=True)
+    for nombre, texto in [("solicitud.pdf", SOLICITUD), ("desprendible.pdf", DESPRENDIBLE),
+                          ("certificado.pdf", CERTIFICADO), ("autorizacion.pdf", AUTORIZACION),
+                          ("pagare.pdf", PAGARE)]:
+        _pdf_texto(base / "documentos" / nombre, texto)
+    (base / "caso.json").write_text(json.dumps({"producto": "libranza", "convenio": "CONV-001",
+                                                "monto": "$ 15.000.000", "plazo_meses": "60"}),
+                                    encoding="utf-8-sig")
+    (base / "LISTO.txt").write_text("ok")
+    # Caso marcado como listo pero sin documentos: no debe detener a los demás.
+    (raiz / "LIB-0002").mkdir()
+    (raiz / "LIB-0002" / "LISTO.txt").write_text("ok")
+    # Carpeta aún descargando (sin LISTO.txt): se ignora.
+    (raiz / "LIB-0003" / "documentos").mkdir(parents=True)
+
+    assert expediente.casos_pendientes(config) == ["LIB-0001", "LIB-0002"]
+    assert procesar_pendientes(config, enviar=True) == 2
+
+    resultado = expediente.cargar_resultado(config, "LIB-0001")
+    assert resultado["datos_caso"]["fuentes"]["monto"] == "bizagi"
+    # Falta la cédula (solo está la imagen en el otro test), así que queda con error y no se envía.
+    assert resultado["estado"] == "REQUIERE_CORRECCION"
+    assert not (config["power_automate"]["carpeta_solicitudes"]).exists()
+    assert (raiz / "LIB-0002" / "ERROR_PROCESO.txt").exists()
+    assert expediente.casos_pendientes(config) == []  # no se reprocesa

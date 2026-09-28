@@ -4,6 +4,7 @@ Ejemplos:
     python -m desembolsos procesar 123456 --producto libranza --convenio CONV-001 \
         --cedula 1020304050 --monto 15.000.000 --tasa 1,45 --tipo-tasa MV --plazo 60
     python -m desembolsos enviar 123456 --observaciones "Cliente con antigüedad de 5 años"
+    python -m desembolsos pendientes --vigilar 60     # casos que deja Power Automate Desktop
 """
 
 from __future__ import annotations
@@ -11,11 +12,10 @@ from __future__ import annotations
 import argparse
 import logging
 import sys
+import time
 
 from . import descargas, expediente, notificador, reporte
 from .config import cargar_config
-from .texto import parse_monto, parse_numero, solo_digitos
-from .validador import DatosCaso
 
 ICONOS = {"ERROR": "[X]", "ALERTA": "[!]", "OK": "[OK]"}
 
@@ -51,40 +51,76 @@ def _imprimir(resultado: dict) -> None:
         print(f"  {ICONOS.get(h['nivel'], '')} {h['regla']}: {h['detalle']}")
 
 
+def _validar_y_reportar(caso: str, valores: dict, config: dict) -> dict:
+    """Valida el caso con los datos de caso.json, sobrescritos por los que se pasen en `valores`."""
+    datos = expediente.datos_desde_dict(caso, {**expediente.leer_datos_caso(config, caso), **valores})
+    resultado = expediente.procesar_caso(datos, config)
+    base = expediente.carpeta_caso(config, caso)
+    reporte.resumen_caso(resultado, base / f"resumen_{expediente.nombre_carpeta(caso)}.xlsx")
+    reporte.registrar_control(resultado, config["rutas"]["control_excel"])
+    _imprimir(resultado)
+    return resultado
+
+
 def cmd_procesar(args, config) -> int:
     if not args.sin_recoger and not _recoger(args, config):
         return 1
-    datos = DatosCaso(
-        caso=args.caso, producto=args.producto, convenio=args.convenio,
-        cedula=solo_digitos(args.cedula) if args.cedula else None, nombre=args.nombre,
-        monto=parse_monto(args.monto) if args.monto else None,
-        tasa=parse_numero(args.tasa) if args.tasa else None, tipo_tasa=args.tipo_tasa,
-        plazo_meses=args.plazo,
-    )
-    resultado = expediente.procesar_caso(datos, config)
-    base = expediente.carpeta_caso(config, args.caso)
-    reporte.resumen_caso(resultado, base / f"resumen_{args.caso}.xlsx")
-    reporte.registrar_control(resultado, config["rutas"]["control_excel"])
-    _imprimir(resultado)
-    print(f"\nResumen: {base / f'resumen_{args.caso}.xlsx'}")
+    valores = {
+        "producto": args.producto, "convenio": args.convenio, "cedula": args.cedula, "nombre": args.nombre,
+        "monto": args.monto, "tasa": args.tasa, "tipo_tasa": args.tipo_tasa, "plazo_meses": args.plazo,
+    }
+    resultado = _validar_y_reportar(args.caso, {k: v for k, v in valores.items() if v is not None}, config)
+    print(f"\nResumen en: {expediente.carpeta_caso(config, args.caso)}")
     if args.enviar:
-        return _enviar(resultado, args, config)
+        return _enviar(resultado, config, args.forzar, args.observaciones)
     print(f"Revise el resultado y envíe al gestor con: python -m desembolsos enviar {args.caso}")
     return 0
 
 
-def _enviar(resultado: dict, args, config) -> int:
-    if resultado["estado"] == "REQUIERE_CORRECCION" and not args.forzar:
+def _enviar(resultado: dict, config: dict, forzar: bool = False, observaciones: str | None = None) -> int:
+    if resultado["estado"] == "REQUIERE_CORRECCION" and not forzar:
         print("\nEl caso tiene ERRORES y no se envió al gestor. Corrija o use --forzar con observaciones.")
         return 2
-    solicitud = notificador.construir_solicitud(resultado, args.observaciones or "", config)
+    solicitud = notificador.construir_solicitud(resultado, observaciones or "", config)
     print(notificador.enviar(solicitud, config))
     reporte.registrar_control(resultado, config["rutas"]["control_excel"], enviado=True)
     return 0
 
 
 def cmd_enviar(args, config) -> int:
-    return _enviar(expediente.cargar_resultado(config, args.caso), args, config)
+    return _enviar(expediente.cargar_resultado(config, args.caso), config, args.forzar, args.observaciones)
+
+
+def procesar_pendientes(config: dict, enviar: bool = False) -> int:
+    """Procesa cada carpeta marcada con LISTO.txt. Devuelve cuántos casos procesó."""
+    pendientes = expediente.casos_pendientes(config)
+    for caso in pendientes:
+        base = expediente.carpeta_caso(config, caso)
+        try:
+            resultado = _validar_y_reportar(caso, {}, config)
+        except Exception as e:  # un caso con problemas no detiene los demás
+            logging.exception("Error procesando el caso %s", caso)
+            (base / expediente.MARCA_ERROR).write_text(f"{type(e).__name__}: {e}\n", encoding="utf-8")
+            print(f"Caso {caso}: no se pudo procesar ({e}). Detalle en {expediente.MARCA_ERROR}")
+            continue
+        if enviar and resultado["estado"] != "REQUIERE_CORRECCION":
+            _enviar(resultado, config)
+    return len(pendientes)
+
+
+def cmd_pendientes(args, config) -> int:
+    if not args.vigilar:
+        if procesar_pendientes(config, args.enviar) == 0:
+            print(f"No hay casos pendientes en {config['rutas']['casos']}")
+        return 0
+    print(f"Vigilando {config['rutas']['casos']} cada {args.vigilar} s (Ctrl+C para detener)...")
+    try:
+        while True:
+            procesar_pendientes(config, args.enviar)
+            time.sleep(args.vigilar)
+    except KeyboardInterrupt:
+        print("Detenido.")
+    return 0
 
 
 def construir_parser() -> argparse.ArgumentParser:
@@ -115,6 +151,11 @@ def construir_parser() -> argparse.ArgumentParser:
     en.add_argument("--forzar", action="store_true", help="Enviar aunque haya errores")
     en.add_argument("--observaciones", help="Comentario del auxiliar para el gestor")
     en.set_defaults(func=cmd_enviar)
+
+    pe = sub.add_parser("pendientes", help="Procesar los casos que Power Automate Desktop dejó listos (LISTO.txt)")
+    pe.add_argument("--vigilar", type=int, metavar="SEGUNDOS", help="Seguir revisando la carpeta cada N segundos")
+    pe.add_argument("--enviar", action="store_true", help="Enviar al gestor los casos que no tengan errores")
+    pe.set_defaults(func=cmd_pendientes)
     return p
 
 

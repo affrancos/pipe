@@ -5,6 +5,8 @@ rutas:
   # Carpeta donde Bizagi deja los documentos descargados.
   descargas: "~/Downloads"
   # Un subdirectorio por caso: casos/<numero_caso>/documentos, textos, resultado.json...
+  # Si Power Automate Desktop descarga los documentos, use aquí la MISMA ruta del flujo
+  # (p. ej. "C:/Desembolsos/casos").
   # Recomendado: ubicarla dentro de una carpeta de OneDrive/SharePoint sincronizada
   # para que el gestor pueda abrir el expediente desde la aprobación de Teams.
   casos: "./casos"

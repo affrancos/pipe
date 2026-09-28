@@ -8,15 +8,20 @@ lo apruebe en **Teams / Outlook** mediante **Power Automate**.
 
 | # | Hoy (manual) | Con la automatización |
 |---|---|---|
-| 1 | El auxiliar descarga los documentos del caso desde Bizagi | Igual: los documentos quedan en *Descargas* |
-| 2 | Abre cada PDF o imagen y lo revisa | `procesar` los mueve al expediente del caso y los lee (OCR para escaneados e imágenes) |
+| 1 | El auxiliar descarga los documentos del caso desde Bizagi | **Power Automate Desktop** los descarga en `casos/<caso>/` (o el auxiliar los descarga en *Descargas*) |
+| 2 | Abre cada PDF o imagen y lo revisa | Python los lee (OCR para escaneados e imágenes) y los clasifica |
 | 3 | Verifica documentación, tasa, monto, convenio y condiciones | Se validan las reglas de `config/` y se genera un resumen en Excel con OK / ALERTA / ERROR |
 | 4 | Envía al gestor | `enviar` crea la aprobación en Teams + Outlook (Power Automate) |
 | 5 | El gestor revisa y aprueba | El gestor aprueba o rechaza desde Teams u Outlook. El auxiliar recibe la respuesta por correo |
 | 6 | Desembolso en Bizagi | Manual (fase 2: Power Automate Desktop) |
 
-Bizagi solo se usa a través de su portal web. La herramienta **no** entra a Bizagi: trabaja con
-los archivos que el auxiliar ya descarga.
+Bizagi solo se usa a través de su portal web, así que hay dos formas de traer los documentos:
+
+- **Automática:** un flujo de Power Automate Desktop entra al portal, descarga los documentos del
+  caso en `casos/<caso>/documentos`, guarda los datos del caso en `caso.json` y crea `LISTO.txt`.
+  Luego `python -m desembolsos pendientes` valida todas las carpetas listas. Ver
+  [`power_automate/GUIA_PAD_BIZAGI.md`](power_automate/GUIA_PAD_BIZAGI.md).
+- **Manual:** el auxiliar descarga los documentos en *Descargas* y ejecuta `procesar` (abajo).
 
 ## Qué valida
 
@@ -53,6 +58,20 @@ Si su equipo no permite instalar programas, pida a TI que instale Python y Tesse
 
 ## Uso
 
+### Con Power Automate Desktop (automático)
+
+```bat
+python -m desembolsos pendientes              :: procesa las carpetas con LISTO.txt y termina
+python -m desembolsos pendientes --vigilar 60 :: sigue revisando cada 60 s (scripts\vigilar_casos.bat)
+python -m desembolsos pendientes --enviar     :: además envía al gestor los casos sin errores
+```
+
+Un caso ya procesado no se vuelve a procesar, salvo que se cree de nuevo su `LISTO.txt`. Si un
+caso falla (por ejemplo, la carpeta no tiene documentos), queda con `ERROR_PROCESO.txt` y los
+demás casos se procesan igual.
+
+### Manual, desde Descargas
+
 Descargue de Bizagi **solo** los documentos del caso y ejecute:
 
 ```bat
@@ -77,7 +96,9 @@ en el escritorio). Con `-v` se ve el detalle de cada documento.
 
 ```
 casos/123456/
-├── documentos/              # los archivos traídos de Descargas
+├── documentos/              # los archivos del caso (de PAD o de Descargas)
+├── caso.json                # datos del caso leídos de Bizagi por PAD (opcional)
+├── LISTO.txt                # PAD lo crea al terminar la descarga
 ├── textos/                  # texto leído de cada documento (auditoría y ajuste de reglas)
 ├── resultado.json           # resultado completo de la validación
 └── resumen_123456.xlsx      # hojas Resumen, Hallazgos y Documentos
